@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules · kidctl</title>
+<meta name="description" content="Summary of kidctl's rule format: downtime, daily limits, approval, notifications, overrides, device controls, app configurations, and the MCP write tools Claude uses to change them.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<main>
+<header class="top"><a href="./" class="brand">kidctl</a><span><a href="start.html">Get started</a> <a href="policy.html">Rules</a> <a href="faq.html">FAQ</a> <a href="privacy.html">Privacy</a> <a href="https://github.com/kidctl" class="gh" aria-label="kidctl on GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></span></header>
+<nav><a href="./">← kidctl</a> <a href="#files">Files</a> <a href="#child">Rules</a> <a href="#order">Evaluation</a> <a href="#notify">Notifications</a> <a href="#overrides">Overrides</a> <a href="#device">Device</a> <a href="#problems">Problems</a> <a href="#claude">Claude</a></nav>
+<h1>Rules</h1>
+<p class="lead">A summary of the format. The complete reference is <a href="https://github.com/kidctl/kidctl/blob/main/docs/POLICY.md">docs/POLICY.md</a>, and every Android control with its API is in <a href="https://github.com/kidctl/kidctl/blob/main/docs/CONTROLS.md">docs/CONTROLS.md</a>.</p>
+
+<h2 id="files">Files</h2>
+<table>
+<tr><th><code>&lt;child&gt;.<wbr>yaml</code></th><td>The child's rules. The file name matches <code>child:</code>.</td></tr>
+<tr><th><code>&lt;child&gt;.<wbr>overrides.<wbr>yaml</code></th><td>Temporary exceptions, each with an expiry (<code>overrides: []</code> when there are none; Claude needs the file to exist).</td></tr>
+<tr><th><code>devices.<wbr>yaml</code></th><td>Phones allowed to sync, whose they are, and the hash of their token. Only you edit it, never Claude.</td></tr>
+</table>
+<p>Run <code>kidctl validate &lt;dir&gt;</code> (or ask Claude to) before pushing. The server refuses an invalid directory and keeps the previous rules.</p>
+
+<h2 id="child">The child's rules</h2>
+<dl>
+<dt>child, timezone</dt><dd>Lowercase name, and an IANA time zone (<code>Europe/Paris</code>) that defines “today” and every clock time.</dd>
+<dt>downtime</dt><dd>Windows when only always-allowed apps work: <code>{start: "21:00", end: "07:00"}</code>. They may cross midnight; <code>days</code> restricts a window to the days it starts; <code>lock_screen: true</code> also keeps the screen locked.</dd>
+<dt>always_allowed</dt><dd>Never limited, usable during downtime: the phone app, maps, school apps.</dd>
+<dt>blocked</dt><dd>Never usable.</dd>
+<dt>approval, approved</dt><dd>With <code>approval: true</code>, an app the child installs stays paused until it is named in <code>approved</code>, <code>always_allowed</code> or a limit.</dd>
+<dt>limits</dt><dd>Daily budgets for groups of apps. <code>apps: ["*"]</code> means every app not always-allowed or excluded. An app must have time left in <b>every</b> limit that matches it.</dd>
+<dt>notify</dt><dd>Notifications for the child, off unless present: <code>notify: {}</code> turns them on with the defaults (see <a href="#notify">below</a>).</dd>
+<dt>device</dt><dd>Settings of the phone itself (see <a href="#device">below</a>).</dd>
+</dl>
+<pre><code>limits:
+  - name: games
+    apps: [com.mojang.minecraftpe]
+    daily: {weekdays: 45m, weekend: 2h}
+  - name: video
+    apps: [com.google.android.youtube]
+    daily: {wed: 1h, default: 30m}     # 0 = blocked that day
+    notify_at: [80]                    # this limit's own thresholds ([] = none)</code></pre>
+<p>Durations: <code>1h30m</code>, <code>45m</code>, <code>2h</code>, <code>90s</code>, <code>0</code>. Day keys: <code>mon</code>…<code>sun</code>, <code>weekdays</code>, <code>weekend</code>, <code>default</code>; the most specific wins, and every day must end up with a value. Usage is foreground time since local midnight, summed over all the child's phones.</p>
+
+<h2 id="order">Evaluation order</h2>
+<p>For each app, about every 30 seconds, on the phone:</p>
+<ol>
+<li><code>blocked</code> → blocked</li>
+<li><code>always_allowed</code> → allowed</li>
+<li>approval on and the app named nowhere → blocked until approved</li>
+<li>active <code>unlock</code> override → allowed</li>
+<li>active <code>lock</code> override → blocked</li>
+<li>inside downtime → blocked</li>
+<li>any matching limit used up (plus extra time) → blocked</li>
+<li>otherwise allowed</li>
+</ol>
+<p>A blocked app shows Android's “App paused” dialog. Never paused: the agent, the launcher, Settings, the phone app, emergency apps and the Play Store.</p>
+<p>When a lock with <code>screen: true</code> or a <code>lock_screen</code> downtime applies, the screen itself locks, and locks again a second after every unlock; always-allowed apps are behind the lock screen too. The lock screen's <i>Emergency call</i> button still works (set a PIN on a child's phone), and an ongoing call is never cut off: the lock waits for the call to end.</p>
+
+<h2 id="notify">Notifications</h2>
+<pre><code>notify:
+  quota_at: [50, 80, 95]   # % of each limit's budget (the default)
+  before_downtime: 5m      # notice before downtime (default 5m, 0 = none)
+  locale: en               # fr (the default) or en</code></pre>
+<p>The child gets <i>“Games: 80% used. 9 min left today.”</i> and <i>“Downtime at 21:00. The phone pauses in 5 min.”</i> Each threshold notifies at most once per limit and day; extra time arms the thresholds above the new percentage again; nothing is notified while an unlock, a lock or downtime decides anyway. A limit's own <code>notify_at</code> replaces <code>quota_at</code> for it. Each notice is reported as an event, and Claude's <code>status</code> shows the thresholds reached today.</p>
+
+<h2 id="overrides">Overrides</h2>
+<pre><code>overrides:
+  - {extra: 30m, limit: games, until: "2026-11-07T21:00", note: "homework done"}
+  - {extra: 15m, until: "2026-11-05T21:00"}                  # every limit
+  - {lock: true, until: "2026-11-04T18:30"}                  # homework
+  - {lock: true, screen: true, until: "2026-11-04T21:00"}    # screen locked too
+  - {unlock: true, from: "2026-12-31T18:00", until: "2027-01-01T01:00"}</code></pre>
+<p><code>from</code> defaults to now; times are in the child's time zone (or RFC 3339; Claude also takes <code>+30m</code> from now). Expired entries are ignored; delete them when convenient, or ask Claude to prune them.</p>
+
+<h2 id="device">Device controls</h2>
+<p>The <code>device:</code> section is applied once per rules version; what depends on an app (its configuration, a default app) is applied again when that app is installed:</p>
+<dl>
+<dt>restrictions</dt><dd>Android user restrictions: <code>no_factory_reset</code>, <code>no_safe_boot</code>, <code>no_config_date_time</code>, <code>no_add_user</code>, <code>no_modify_accounts</code>, <code>no_install_unknown_sources_globally</code>, <code>no_config_vpn</code>, <code>disallow_config_private_dns</code>, <code>no_config_tethering</code>, <code>disallow_config_default_apps</code>, <code>no_debugging_features</code>…</dd>
+<dt>hidden, uninstall_blocked</dt><dd>Apps removed from the launcher; apps that cannot be uninstalled (the agent itself always is).</dd>
+<dt>user_control_disabled</dt><dd>Apps that cannot be force-stopped, or their storage cleared, from Settings, and that get no <i>Stop</i> button in Quick Settings › Active apps. <code>no_control_apps</code> alone leaves that button, and a stopped VPN app is not restarted by Android. The agent itself is always protected.</dd>
+<dt>camera_disabled, screen_capture_disabled</dt><dd>Camera and screenshots off.</dd>
+<dt>always_on_vpn, private_dns</dt><dd>A VPN app that Android keeps running, optionally with lockdown (no traffic without it); a forced Private DNS host for filtering (removed: back to Android's <i>Automatic</i>).</dd>
+<dt>app_config</dt><dd>Managed configurations: the keys an app declares for its administrator, which the user then cannot change in the app. <code>com.tailscale.ipn: {ForceEnabled: true}</code> keeps Tailscale's own switch on. The agent checks each key and value against what the app declares, and reports what it applied.</dd>
+<dt>wifi_ssids</dt><dd><code>{allow: [...]}</code> or <code>{deny: [...]}</code>. An allow list blocks every other network, at school and at friends' too: prefer a deny list.</dd>
+<dt>default_apps</dt><dd>Locked default launcher and browser (for the browser, hide the other browsers: Android asks its browser role first).</dd>
+<dt>permitted_input_methods, permitted_accessibility_services</dt><dd>Allowed keyboards and accessibility services.</dd>
+<dt>auto_system_updates, location_always_on</dt><dd>OS updates installed automatically; location kept on.</dd>
+<dt>lock_screen_info, support_message, organization_name</dt><dd>Texts shown on the lock screen, on blocked settings, and as “This device belongs to …”.</dd>
+</dl>
+<pre><code>device:
+  restrictions: [no_factory_reset, no_safe_boot, no_config_date_time, no_config_vpn]
+  always_on_vpn: {package: com.tailscale.ipn, lockdown: true}
+  private_dns: {mode: host, host: dns.example.org}
+  uninstall_blocked: [com.tailscale.ipn]
+  user_control_disabled: [com.tailscale.ipn]
+  app_config:
+    com.tailscale.ipn:
+      ForceEnabled: true                 # its own switch stays on
+      UseTailscaleDNSSettings: always    # the tailnet's (filtering) DNS
+      Hostname: alex-phone
+  organization_name: kidctl
+  lock_screen_info: "Alex's phone. Found it? Call 555 0100."</code></pre>
+
+<h2 id="problems">Problems the phone reports</h2>
+<p>Every device setting goes through Android's device-policy API and, wherever Android lets the agent read it back, is checked afterwards. Anything that fails or doesn't hold becomes an event, once while it lasts: <code>restriction_failed</code>, <code>vpn_failed</code>, <code>private_dns_failed</code>, <code>app_config_failed</code> (<i>not declared by the app, did you mean Hostname?</i>), <code>user_control_disabled_failed</code>, <code>default_app_ineffective</code>, <code>suspend_failed</code>… The agent tries again at the next rules change or app install. Claude's <code>list_children</code> and <code>status</code> show, per phone, <code>policy up to date</code> or <code>policy behind: has X, served Y</code>, and its last error.</p>
+
+<h2 id="claude">Changing rules through Claude</h2>
+<p>With the server's GitOps writes set up (<a href="start.html#writes">how</a>), Claude connected over OAuth can change every rule. Each tool edits only <code>&lt;child&gt;.yaml</code> or <code>&lt;child&gt;.overrides.yaml</code>, keeps the file's comments and layout (only the lines that change are touched), validates the whole directory like <code>kidctl validate</code>, commits as <code>kidctl-mcp: &lt;tool&gt; &lt;child&gt;: &lt;summary&gt;</code> with a <code>Requested-By:</code> line, and pushes. If someone pushed meanwhile, it re-applies the change on top and tries once more.</p>
+<table>
+<tr><th><code>add_<wbr>override</code></th><td>extra time, a lock (optionally with the screen) or an unlock, until a time</td></tr>
+<tr><th><code>remove_<wbr>override</code>, <code>prune_<wbr>overrides</code></th><td>one exception, or every expired one</td></tr>
+<tr><th><code>approve_<wbr>app</code></th><td>an app into <code>approved</code>, <code>always_allowed</code>, a limit, or approved outside every <code>"*"</code> limit</td></tr>
+<tr><th><code>block_<wbr>app</code>, <code>unblock_<wbr>app</code></th><td><code>blocked</code></td></tr>
+<tr><th><code>set_<wbr>limit</code></th><td>a limit's apps, exclusions, daily budgets and notification thresholds, or a new limit</td></tr>
+<tr><th><code>set_<wbr>downtime</code></th><td>the downtime windows</td></tr>
+<tr><th><code>set_<wbr>device</code></th><td>any <code>device:</code> setting, or its removal</td></tr>
+<tr><th><code>write_<wbr>policy</code></th><td>the whole file, for anything else; refused unless the file is still the revision Claude read (<code>policy_source</code>), so a concurrent edit is never overwritten</td></tr>
+<tr><th><code>policy_<wbr>source</code>, <code>validate_<wbr>policy</code></th><td>read a file with its comments and revision; check a candidate file</td></tr>
+</table>
+<p>Every write tool takes a dry run: the diff and the validation result, nothing committed. Claude never writes <code>devices.yaml</code> and never creates a file, and the write tools need the owner password (OAuth).</p>
+
+<footer><a href="https://github.com/kidctl/kidctl/blob/main/LICENSE">MIT licensed</a> · self-hosted, no cloud, no tracking · <a href="https://github.com/kidctl">GitHub</a></footer>
+</main>
+</body>
+</html>

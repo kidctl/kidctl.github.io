@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · kidctl</title>
+<meta name="description" content="What kidctl collects, where it is stored, and what it never touches. Self-hosted: nothing goes to us. What Claude sees and changes when you connect it.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<main>
+<header class="top"><a href="./" class="brand">kidctl</a><span><a href="start.html">Get started</a> <a href="policy.html">Rules</a> <a href="faq.html">FAQ</a> <a href="privacy.html">Privacy</a> <a href="https://github.com/kidctl" class="gh" aria-label="kidctl on GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></span></header>
+<nav><a href="./">← kidctl</a> <a href="#sent">What is sent</a> <a href="#never">Never</a> <a href="#where">Where it lives</a> <a href="#claude">Claude</a> <a href="#site">This website</a></nav>
+<h1>Privacy</h1>
+<p class="lead">kidctl is software you run, not a service. There is no kidctl account, no kidctl cloud, and nothing is ever sent to the people who write it.</p>
+
+<h2 id="sent">What the phone sends, and to whom</h2>
+<p>The agent talks to one place: the server address you gave it. About once a minute it sends:</p>
+<ul>
+<li>the time spent today in each app, in seconds of foreground use;</li>
+<li>the list of installed apps (name, package, whether the child installed it, whether it is paused), only when it changes;</li>
+<li>the agent's version, the Android version, the version of the rules it applies, and whether it is still device owner;</li>
+<li>events and errors: the phone booted, a notice shown to the child, an app configuration applied (values of keys that look like secrets are shown as <code>&lt;redacted&gt;</code>), a setting Android refused, an update installed.</li>
+</ul>
+<p>The server answers with the rules and, when you publish one, an agent update, which the phone downloads from the same server. That's the whole conversation. Notifications to the child are written and shown by the phone itself: no push service is involved.</p>
+
+<h2 id="never">What it never collects</h2>
+<p>Messages, calls, contacts, photos, browsing history, notifications, screen contents, keystrokes, location. The rules can keep location switched on, so that you can find a lost phone with Android's usual tools, but kidctl itself never reads or sends it. The agent has no third-party code at all: no analytics, no crash reporter, no advertising library.</p>
+
+<h2 id="where">Where it lives</h2>
+<ul>
+<li><b>Usage</b>: in one SQLite file on your server. Delete it and it's gone.</li>
+<li><b>Rules</b>: in your git repository, readable by whoever you give access to.</li>
+<li><b>Secrets</b>: the server stores only SHA-256 hashes of the phones' tokens and of the OAuth tokens it hands to Claude, and an argon2id hash of your owner password. If Claude may change rules, the server also holds an ssh deploy key for your rules repo, and nothing else.</li>
+<li><b>Abuse protection</b>: every request is rate-limited, and an address that keeps failing to authenticate is banned for an hour. A banned address still gets answers to requests with valid credentials, so a household sharing one internet address is never locked out by failed attempts coming from that address.</li>
+</ul>
+
+<h2 id="claude">If you connect Claude</h2>
+<p>Claude only sees what you ask about. When it reads usage, the app list, events or a rules file through MCP, that data becomes part of your conversation, under the terms of your Claude account. When it changes a rule, the change is a commit in your repo that records which client asked for it. Connecting a client takes your owner password. Don't connect it if you'd rather not: everything works from git alone.</p>
+
+<h2>Google</h2>
+<p>The phone is still an Android phone, usually with a Google account. Google's own services work, and collect, as they normally do; kidctl adds nothing to that.</p>
+
+<h2>Tell your child</h2>
+<p>kidctl works best out in the open. Show the rules to your child, explain what they can see and what you can see, and change the rules together as they grow up. The file is short enough to read together.</p>
+
+<h2 id="site">This website</h2>
+<p>Static pages on GitHub Pages: no cookies, no analytics, no scripts. GitHub keeps its own server logs, see its <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">privacy statement</a>.</p>
+
+<footer><a href="https://github.com/kidctl/kidctl/blob/main/LICENSE">MIT licensed</a> · self-hosted, no cloud, no tracking · <a href="https://github.com/kidctl">GitHub</a></footer>
+</main>
+</body>
+</html>

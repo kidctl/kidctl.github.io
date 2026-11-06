@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kidctl · parental control for Android, run from a git repo</title>
+<meta name="description" content="Self-hosted parental control for Android phones. The rules are YAML in your git repo; push, or ask Claude, and the phone applies them within minutes. Rust server, headless device-owner agent, MCP with write tools over OAuth.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<main>
+<header class="top"><span></span><span><a href="start.html">Get started</a> <a href="policy.html">Rules</a> <a href="faq.html">FAQ</a> <a href="privacy.html">Privacy</a> <a href="https://github.com/kidctl" class="gh" aria-label="kidctl on GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></span></header>
+<h1>kidctl</h1>
+<p class="lead">Parental control for your children's Android phones, without handing their days to a cloud service. The rules are a short YAML file in a git repository you own. Edit it and push, or just ask Claude, and the phone follows within a couple of minutes.</p>
+
+<div class="links">
+<a href="start.html">Get started</a>
+<a href="https://github.com/kidctl/kidctl">Source code</a>
+<a href="policy.html">Rule reference</a>
+<a href="faq.html">FAQ</a>
+<a href="privacy.html">Privacy</a>
+</div>
+
+<div class="shots">
+<figure><img src="img/shot-paused.svg" alt="Screenshot placeholder: Android's App paused dialog" width="360" height="640"><figcaption>Time's up: Android's own “App paused” dialog.</figcaption></figure>
+<figure><img src="img/shot-claude.svg" alt="Screenshot placeholder: asking Claude for 30 more minutes" width="360" height="640"><figcaption>“Give Alex 30 more minutes of games tonight.”</figcaption></figure>
+<figure><img src="img/shot-git.svg" alt="Screenshot placeholder: a rule change in git" width="360" height="640"><figcaption>Every change is a commit: who, when, why.</figcaption></figure>
+</div>
+
+<h2>What it does</h2>
+<ul>
+<li><b>Daily time budgets</b> per group of apps and per weekday, counted across all of a child's phones.</li>
+<li><b>Downtime</b> for bedtime or school hours, optionally with the screen kept locked (emergency calls still work).</li>
+<li><b>Always-allowed</b> apps (phone, maps, school apps) and <b>blocked</b> ones.</li>
+<li><b>Approval of new apps</b>: anything the child installs stays paused until you list it.</li>
+<li><b>Temporary exceptions</b> that expire on their own: extra time tonight, a lock for homework, an unlock for a party.</li>
+<li><b>A heads-up for the child</b>: a notification at 50, 80 and 95 % of a budget and a few minutes before downtime, in French or English, each at most once a day.</li>
+<li><b>Ask Claude to change the rules</b>: approve or block an app, extra time, lock or unlock, a limit, the downtime, any device setting. Every change is a validated git commit in your repo.</li>
+<li><b>The phone itself</b>: no factory reset, no safe mode, no changing the clock, no new users or accounts; hidden apps, camera and screenshots, allowed or denied Wi-Fi networks, a locked default browser and launcher, no <i>Force stop</i> or <i>Clear storage</i> for the apps you list.</li>
+<li><b>Filtering that follows the phone</b>: always-on VPN and enforced Private DNS, so your DNS filter applies on mobile data too.</li>
+<li><b>Managed app configurations</b>: the settings an app lets its administrator fix, for example a VPN app's own on/off switch kept on.</li>
+<li><b>Updates itself over the air</b> from your server, with USB debugging off; proven on a real phone with Play Protect on.</li>
+<li><b>Tells you what didn't work</b>: anything Android refuses is reported as an event, and you can see whether each phone has the rules your server serves now. Plus usage per app per day.</li>
+</ul>
+
+<h2>How it works</h2>
+<pre><code>you ── git push ──────────► your git repo
+                              │      ▲
+          pulled by Argo CD,  │      │  Claude's changes:
+          Flux or a timer     ▼      │  validated, committed, pushed
+Claude ── MCP, OAuth ─────► kidctl server     validates and serves the rules,
+                              ▲               stores usage and events
+                              │  every minute: usage up, rules down
+                              ▼
+                         phone agent          device owner, enforces offline</code></pre>
+<ul>
+<li>The <b>server</b> (Rust, one binary or a container) watches a directory checked out from your repo. A broken edit is rejected and the last valid rules stay in force.</li>
+<li>The <b>agent</b> is an Android app set up as <i>device owner</i>, the mode Android reserves for managed phones. It has no screen and no dependencies. It measures foreground time per app, evaluates the rules locally every 30 seconds and pauses apps with Android's own mechanism. No network, no problem: the rules keep applying.</li>
+<li>The <b>repo</b> is your control panel and your audit log, whether you edit it yourself or Claude does. Use any git host, private if you like.</li>
+</ul>
+
+<h2>The rules, in full</h2>
+<pre><code>child: alex
+timezone: Europe/Paris
+
+downtime:
+  - {start: "21:00", end: "07:00"}
+  - {start: "22:30", end: "07:00", days: [fri, sat], lock_screen: true}
+
+always_allowed: [com.google.android.dialer, com.google.android.apps.maps]
+blocked: [com.zhiliaoapp.musically]
+
+approval: true                 # new apps wait for you
+approved: [com.duolingo]
+
+limits:
+  - name: games
+    apps: [com.mojang.minecraftpe, com.supercell.brawlstars]
+    daily: {weekdays: 45m, weekend: 2h}
+  - name: video
+    apps: [com.google.android.youtube]
+    daily: {wed: 1h, sat: 1h30m, sun: 1h30m, default: 30m}
+  - name: everything
+    apps: ["*"]
+    daily: {weekdays: 2h, weekend: 3h}
+
+notify: {quota_at: [50, 80, 95], before_downtime: 5m, locale: en}
+
+device:
+  restrictions: [no_factory_reset, no_safe_boot, no_config_date_time, no_add_user]
+  private_dns: {mode: host, host: dns.example.org}
+  user_control_disabled: [com.tailscale.ipn]   # no Force stop / Clear storage
+  app_config:
+    com.tailscale.ipn: {ForceEnabled: true}     # its own switch stays on</code></pre>
+<p>And for tonight only, in <code>alex.overrides.yaml</code>:</p>
+<pre><code>overrides:
+  - {extra: 30m, limit: games, until: "2026-11-07T21:00", note: "homework done"}</code></pre>
+<p>See the <a href="policy.html">rule reference</a> for everything else.</p>
+
+<h2 id="claude">Ask Claude</h2>
+<p>The server speaks the Model Context Protocol. Add it as a custom connector in claude.ai or in Claude Code, sign in with your owner password (OAuth), and ask in plain words:</p>
+<ul>
+<li><i>“How long was Alex on YouTube today, and how much is left?”</i></li>
+<li><i>“Alex just installed an app. What is it? Approve it in the games limit.”</i></li>
+<li><i>“Give Alex 30 more minutes of games tonight.”</i></li>
+<li><i>“Lock Alex's phone until 18:30 for homework, screen included.”</i></li>
+<li><i>“Bedtime at 21:30 on school nights from now on. Show me the diff first.”</i></li>
+<li><i>“Does Alex's phone have the new rules yet? Did anything fail?”</i></li>
+</ul>
+<p>Claude reads live status, usage, installed apps, the rules and the phone's events. When it changes something, the change goes through git like yours: the server edits only the child's file, keeps your comments and layout, validates the whole directory, commits with a note of who asked, and pushes. The phones apply it two to three minutes later. A dry run shows the diff without committing; a whole-file rewrite is refused if the file changed since Claude read it, so nobody's edit is lost. To undo, revert the commit.</p>
+
+<h2>Supported</h2>
+<table>
+<tr><th>Phones</th><td>Android 13 or newer, set up from a factory reset (developed on Android 17; runs on a Pixel 8)</td></tr>
+<tr><th>Server</th><td>Any Linux machine or Kubernetes cluster that the phone can reach over HTTPS; container image built from the repo</td></tr>
+<tr><th>Rules</th><td>A git repository on any host; for Claude's changes, one the server can push to with a deploy key</td></tr>
+<tr><th>Claude</th><td>claude.ai and Claude Code, over MCP with OAuth</td></tr>
+<tr><th>Not supported</th><td>iPhone and iPad (<a href="faq.html#ios">why</a>)</td></tr>
+</table>
+
+<footer><a href="https://github.com/kidctl/kidctl/blob/main/LICENSE">MIT licensed</a> · self-hosted, no cloud, no tracking · <a href="https://github.com/kidctl">GitHub</a></footer>
+</main>
+</body>
+</html>

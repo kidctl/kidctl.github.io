@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="640" viewBox="0 0 360 640" role="img" aria-label="Screenshot placeholder: A rule change in git">
+  <rect x="6" y="6" width="348" height="628" rx="40" fill="#8a9a93" fill-opacity="0.08" stroke="#8a9a93" stroke-width="3" stroke-dasharray="10 8"/>
+  <rect x="150" y="26" width="60" height="8" rx="4" fill="#8a9a93" fill-opacity="0.5"/>
+  <g fill="none" stroke="#8a9a93" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8">
+    <rect x="140" y="250" width="80" height="62" rx="10"/><circle cx="180" cy="281" r="17"/><path d="M158 250 l8 -12 h28 l8 12"/>
+  </g>
+  <g font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" fill="#8a9a93" text-anchor="middle">
+    <text x="180" y="356" font-size="20" font-weight="600">Screenshot</text>
+    <text x="180" y="384" font-size="16">A rule change in git</text>
+  </g>
+</svg>

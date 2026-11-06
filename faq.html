@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAQ · kidctl</title>
+<meta name="description" content="What Android lets kidctl do and not do, iPhone, Play Protect and developer verification, changing rules with Claude, emergency calls, a shared home IP, removing kidctl.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<main>
+<header class="top"><a href="./" class="brand">kidctl</a><span><a href="start.html">Get started</a> <a href="policy.html">Rules</a> <a href="faq.html">FAQ</a> <a href="privacy.html">Privacy</a> <a href="https://github.com/kidctl" class="gh" aria-label="kidctl on GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></span></header>
+<nav><a href="./">← kidctl</a> <a href="#android">Android</a> <a href="#ios">iPhone</a> <a href="#play-protect">Play Protect</a> <a href="#claude">Claude</a> <a href="#everyday">Everyday use</a></nav>
+<h1>FAQ</h1>
+<p class="lead">The questions parents ask first.</p>
+
+<h2 id="android">What Android allows, and what it doesn't</h2>
+
+<h3>Why does the phone have to be factory reset?</h3>
+<p>kidctl's agent is a <i>device owner</i>: the mode Android reserves for managed phones, the only one that can pause apps, block a factory reset or force a VPN. Android lets an app become device owner only on a phone that has no account yet, which in practice means right after a reset. You add the child's Google account afterwards.</p>
+
+<h3>What can it control?</h3>
+<p>Apps, not what happens inside them. It can pause any app (except a few Android protects: Settings, the phone app, emergency apps, the Play Store), hide apps, lock the screen, turn off the camera or screenshots, restrict Wi-Fi networks, force a VPN and Private DNS, keep apps from being force-stopped or uninstalled, set the managed configuration of apps that offer one, show notifications to the child, and forbid a long list of settings changes. The full list, with the Android API behind each control, is in <a href="https://github.com/kidctl/kidctl/blob/main/docs/CONTROLS.md">docs/CONTROLS.md</a>.</p>
+
+<h3>What can't it do?</h3>
+<ul>
+<li><b>Limit a website, a channel or a game mode.</b> Android counts time per app, so a browser is one app (see below for websites).</li>
+<li><b>Read anything inside apps</b>: messages, history, what's on screen. It doesn't try.</li>
+<li><b>Configure any app.</b> Managed configurations only exist for apps that declare them (Tailscale does, for example); a key the app doesn't declare is refused and reported.</li>
+<li><b>Choose the browser outright.</b> Android asks the holder of its browser role (Chrome by default) before any locked default, and a device owner can't change that role: hide the other browsers instead.</li>
+<li><b>Survive a wipe from the recovery menu.</b> See below.</li>
+<li><b>Manage another device</b>: a tablet or a computer needs its own tools.</li>
+</ul>
+
+<h3>Can it limit a website, or one channel?</h3>
+<p>No. To filter websites, use a filtering DNS (your own, or a service) and force it with <code>private_dns</code> or an always-on VPN: then the filter follows the phone on mobile data too, and the child can't turn it off.</p>
+
+<h3>Can my child get around it?</h3>
+<p>The usual ways are closed by the rules you choose: uninstalling or force-stopping the agent (always blocked), safe mode (<code>no_safe_boot</code>), changing the clock to fool the budgets (<code>no_config_date_time</code>), a second user or a private space (<code>no_add_user</code>), the factory reset in Settings (<code>no_factory_reset</code>). For the VPN that carries your DNS filter: <code>always_on_vpn</code> (with lockdown, no traffic without it), the app in <code>user_control_disabled</code> so that Quick Settings has no <i>Stop</i> button for it (Android doesn't restart a stopped VPN app), and, for an app like Tailscale, its own switch locked on through <code>app_config</code>. Lockdown with Tailscale hasn't been tested end to end yet. What remains is wiping the phone from its recovery menu: it removes kidctl along with everything on the phone, and it shows, because the phone stops syncing. Linking factory-reset protection to a parent's account is planned.</p>
+
+<h3>And emergency calls?</h3>
+<p>The phone app and emergency apps are never paused. When the rules lock the screen, the lock screen's <i>Emergency call</i> button still works (set a PIN on a child's phone), and an ongoing call is never cut off: the lock waits for the call to end. Android's Emergency SOS (press the power button five times) always works.</p>
+
+<h3>What happens without network?</h3>
+<p>Nothing changes for the child. The phone evaluates the rules itself every 30 seconds with the last rules it received; usage is sent at the next sync. Time spent on another of the child's phones is counted once both have synced.</p>
+
+<h2 id="ios">iPhone and iPad</h2>
+<p>Not supported, and not for lack of trying: Apple's Screen Time API gives apps opaque, per-device tokens instead of app names, and keeps usage on the device. There is no way to build a self-hosted, rules-in-git equivalent on iOS. For Apple devices, use Screen Time.</p>
+
+<h2 id="play-protect">Play Protect and developer verification</h2>
+<p>On phones with Google Play, Play Protect checks every app installation, including the agent's updates of itself. For an app from a developer Google doesn't know, it can hold the update behind an “App blocked to protect your device” dialog that someone must tap on the phone, which defeats silent updates. That is what happened on an emulator in October 2026, until scanning was turned off.</p>
+<p>Google is also rolling out <b>Android developer verification</b>: apps installed outside the Play Store on certified Android phones must come from a registered developer, who registers their package names and signing keys. With the agent's package and key registered, a real Pixel 8 on Android 17, with <i>Scan apps with Play Protect</i> on and <code>ensure_verify_apps</code> in the rules, installed the agent's over-the-air updates by itself, no dialog, about 40 seconds after they were published.</p>
+<p>If you build and sign the agent yourself, your key is not the registered one: register your own with Android developer verification (which may mean a package name of your own). If an update ever stops at the dialog (Claude's <code>events</code> shows <code>agent_update_failed … INSTALL_FAILED_VERIFICATION_FAILURE</code>), turn off <i>Scan apps with Play Protect</i> on the child's phone and leave <code>ensure_verify_apps</code> out of the rules (it forces scanning back on). Apps from the Play Store are still checked by Google either way. <a href="https://github.com/kidctl/kidctl/blob/main/docs/PROVISIONING.md">docs/PROVISIONING.md</a> has the details.</p>
+
+<h2 id="claude">Claude</h2>
+
+<h3>Can Claude change the rules, or only read them?</h3>
+<p>Both, if you set it up. Over OAuth (you sign in with the owner password), Claude can approve or block apps, give extra time, lock or unlock the phone, change limits, downtime or any device setting, or rewrite a whole file. Without the GitOps settings, or over the older secret-URL connection, it only reads. Every change is a commit in your repo, so you can still edit the files yourself, from any computer, as before.</p>
+
+<h3>What if Claude gets it wrong?</h3>
+<p>A change that doesn't validate is refused, and nothing is committed. Ask for a dry run to see the exact diff first. Claude only ever edits a child's rules file or overrides file, never the list of phones, and it keeps your comments. Every commit says which client asked for it; to undo one, revert it in git and push.</p>
+
+<h3>Can my child change the rules through Claude?</h3>
+<p>Not without the owner password: connecting a Claude client to your server means signing in on your server's page. The server stores only a hash of the password, and stops checking passwords from an address that keeps failing.</p>
+
+<h3>How do I know the phone got the change?</h3>
+<p>Ask Claude. <code>list_children</code> shows, per phone, <code>policy up to date</code> or <code>policy behind: has X, served Y</code>, and <code>events</code> shows what the agent did, and what Android refused (<code>…_failed</code> events), each reported once while it lasts.</p>
+
+<h3>What if I edit a file while Claude does?</h3>
+<p>Nothing is lost. If you pushed in between, the server applies Claude's change on top of yours and tries once more. A whole-file rewrite is refused if the file is no longer the revision Claude read.</p>
+
+<h2 id="everyday">Everyday use</h2>
+
+<h3>How fast does a change reach the phone?</h3>
+<p>The phone syncs every minute. Add the time your server takes to pull the repo: measured, about two to three minutes from push to phone with Argo CD.</p>
+
+<h3>Several children, several phones?</h3>
+<p>Yes. One file per child, any number of phones per child in <code>devices.yaml</code>; budgets count the time spent on all of a child's phones together.</p>
+
+<h3>Our whole household shares one internet address. Is that a problem?</h3>
+<p>No. The server bans an address for an hour after repeated failed sign-ins or scanner probes, but a banned address is still served whenever the request carries valid credentials: the children's phones keep syncing and updating, and your connected Claude keeps working. Harmless requests (the home page, <code>/.well-known/</code> discovery) never count. Every address is rate-limited, banned or not.</p>
+
+<h3>Does it work with Family Link or a school's device management?</h3>
+<p>kidctl replaces them on that phone. Don't let another management app take over the same phone (for example, Google Workspace's advanced mobile management installs its own device policy app): two managers fight. Family Link supervision has not been tested alongside kidctl.</p>
+
+<h3>What does my child see?</h3>
+<p>No app to open and no icon; only a silent, minimized notification in the shade says the agent is running. If you turn them on, a notification says when a budget is getting used up or downtime is near. A paused app shows Android's own “App paused” dialog, and the lock screen can show a text of your choice. Android itself mentions that the phone is managed.</p>
+
+<h3>How do I remove kidctl from a phone?</h3>
+<p>Remove <code>no_factory_reset</code> from the rules, push, then factory reset the phone. A device owner goes away with a reset, by design.</p>
+
+<h3>Is it free?</h3>
+<p>Yes, MIT licensed. You run it on your own hardware; there is no service to subscribe to.</p>
+
+<footer><a href="https://github.com/kidctl/kidctl/blob/main/LICENSE">MIT licensed</a> · self-hosted, no cloud, no tracking · <a href="https://github.com/kidctl">GitHub</a></footer>
+</main>
+</body>
+</html>

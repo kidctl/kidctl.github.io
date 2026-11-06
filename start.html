@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get started · kidctl</title>
+<meta name="description" content="What you need and the steps to set up kidctl: a rules repo, the server on Docker or Kubernetes, a phone provisioned as device owner, Claude over OAuth, and a deploy key for Claude's changes.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<main>
+<header class="top"><a href="./" class="brand">kidctl</a><span><a href="start.html">Get started</a> <a href="policy.html">Rules</a> <a href="faq.html">FAQ</a> <a href="privacy.html">Privacy</a> <a href="https://github.com/kidctl" class="gh" aria-label="kidctl on GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></span></header>
+<nav><a href="./">← kidctl</a> <a href="#need">What you need</a> <a href="#rules">Rules</a> <a href="#server">Server</a> <a href="#phone">Phone</a> <a href="#claude">Claude</a> <a href="#writes">Claude's changes</a> <a href="#updates">Updates</a></nav>
+<h1>Get started</h1>
+<p class="lead">An evening for the server and the rules, half an hour per phone. The full procedure, with every detail, is in <a href="https://github.com/kidctl/kidctl/blob/main/docs/PROVISIONING.md">docs/PROVISIONING.md</a>; every server setting is in the <a href="https://github.com/kidctl/kidctl/blob/main/README.md">README</a>.</p>
+
+<h2 id="need">What you need</h2>
+<ul>
+<li><b>An Android phone you can factory reset</b>, Android 13 or newer. Android only lets an app become <i>device owner</i> on a phone with no account yet, so the setup starts from a reset. Back up whatever is on it first.</li>
+<li><b>A small server</b> that the phone can reach over HTTPS: a home server with Docker, a VPS, or a Kubernetes cluster. The server is one Rust binary with a SQLite file; it needs very little. Put it behind a reverse proxy that terminates HTTPS and sets <code>X-Forwarded-For</code> (or Cloudflare's <code>CF-Connecting-IP</code>): the abuse protection counts per client address.</li>
+<li><b>A git repository</b> for the rules, on any host. Private is a good idea: it holds your children's schedules. If you want Claude to change rules, the server needs to push to it over ssh with a deploy key, so a dedicated repo for the rules is the tidiest.</li>
+<li><b>A computer</b> with a USB cable and <code>adb</code> (Android platform tools), the Rust toolchain (for the <code>kidctl</code> command), and JDK 21 with the Android SDK to build the agent.</li>
+<li><b>A signing key for the agent</b>, kept forever (see below).</li>
+<li>Optional: a Claude account (claude.ai or Claude Code), and an Android developer verification registration for the agent (<a href="faq.html#play-protect">why</a>).</li>
+</ul>
+
+<h3>The agent's signing key</h3>
+<p>Android only updates a device-owner app with an APK signed by the <b>same key</b>. Lose it and the only way to update the agent is a factory reset. Create it once, back it up with its password:</p>
+<pre><code>mkdir -p ~/.config/kidctl &amp;&amp; chmod 700 ~/.config/kidctl
+keytool -genkeypair -keystore ~/.config/kidctl/kidctl-release.jks -storetype PKCS12 \
+  -alias kidctl -keyalg RSA -keysize 4096 -validity 10000 -dname CN=kidctl</code></pre>
+<p>and tell the build where it is, in <code>~/.config/kidctl/signing.properties</code> (mode 600; <code>storeFile</code> is an absolute path, and with PKCS12 both passwords are the same):</p>
+<pre><code>storeFile=&lt;your home directory&gt;/.config/kidctl/kidctl-release.jks
+storePassword=&lt;the password&gt;
+keyAlias=kidctl
+keyPassword=&lt;the password&gt;</code></pre>
+<p>Without this file the agent is signed with your computer's debug key, which then has to stay the same forever.</p>
+
+<h2 id="rules">1. Write the rules</h2>
+<p>One directory, one file per child, plus the list of phones:</p>
+<pre><code>policies/
+├── alex.yaml               # Alex's rules
+├── alex.overrides.yaml     # temporary exceptions (overrides: [] when there are none)
+└── devices.yaml            # phones allowed to sync, and whose they are</code></pre>
+<p>Start small, you can tighten later:</p>
+<pre><code>child: alex
+timezone: Europe/Paris
+downtime:
+  - {start: "21:00", end: "07:00"}
+always_allowed: [com.google.android.dialer]
+limits:
+  - name: everything
+    apps: ["*"]
+    daily: {weekdays: 1h30m, weekend: 3h}
+notify: {}                  # heads-up at 50/80/95 % and 5 min before downtime, in French; locale: en for English</code></pre>
+<p>Create the overrides file even if it is empty: Claude adds exceptions to it but never creates files.</p>
+<pre><code>overrides: []</code></pre>
+<p>Create a token for the phone. The raw token goes to the phone only; git gets its hash:</p>
+<pre><code>kidctl token
+#   token:        &lt;64 hex characters, keep it for the phone&gt;
+#   token_sha256: &lt;64 hex characters, goes into devices.yaml&gt;</code></pre>
+<pre><code>devices:
+  - {id: alex-phone, child: alex, token_sha256: &lt;token_sha256&gt;}</code></pre>
+<p>Check before every push:</p>
+<pre><code>kidctl validate policies/
+#   ok: 1 children (alex), 1 devices</code></pre>
+
+<h2 id="server">2. Run the server</h2>
+<p>The image is built from the repository and runs as the unprivileged user 65532. It reads the rules from <code>/etc/kidctl</code> and keeps its state in <code>/data</code>: the usage database, agent releases, OAuth clients and tokens (hashed), and its clone of your repo for Claude's changes.</p>
+
+<h3>With Docker</h3>
+<pre><code>git clone https://github.com/kidctl/kidctl &amp;&amp; cd kidctl
+docker build -t kidctl .
+sudo install -d -o 65532 -g 65532 -m 0750 /srv/kidctl/data
+docker run -d --name kidctl --restart unless-stopped -p 127.0.0.1:8080:8080 \
+  -v /srv/kidctl/policies:/etc/kidctl:ro \
+  -v /srv/kidctl/data:/data \
+  kidctl
+curl -s http://127.0.0.1:8080/healthz      # ok</code></pre>
+<p>Point your HTTPS reverse proxy at port 8080, for example as <code>https://kidctl.example.net</code>. Keep <code>/srv/kidctl/policies</code> a clone of your repo's rules directory, with a <code>git pull</code> every minute from a timer.</p>
+
+<h3>With Kubernetes</h3>
+<p>Let Argo CD or Flux generate a ConfigMap from the rules directory, with a stable name so that an edit updates the mounted files instead of restarting the pod:</p>
+<pre><code># kustomization.yaml, next to policies/
+configMapGenerator:
+  - name: kidctl-policies
+    files:
+      - policies/alex.yaml
+      - policies/alex.overrides.yaml
+      - policies/devices.yaml
+    options: {disableNameSuffixHash: true}</code></pre>
+<p>Run one replica with the <code>Recreate</code> strategy (one SQLite writer), mount the ConfigMap as a directory at <code>/etc/kidctl</code> (no <code>subPath</code>, or updates don't propagate) and a persistent volume at <code>/data</code>, with <code>runAsUser</code>/<code>fsGroup</code> 65532, a read-only root filesystem, and <code>/healthz</code> for the probes. A 128 MiB memory limit is plenty. The repository has all of it ready to copy into your GitOps repo: <a href="https://github.com/kidctl/kidctl/tree/main/deploy/k8s"><code>deploy/k8s</code></a> (kustomization, Deployment, Service, volume and example rules), and <code>deploy.sh</code> builds the image, pushes it to your registry and bumps its tag there.</p>
+
+<p>Either way, the server reloads the rules directory within seconds of a change. An invalid push never reaches the phones: the server logs the errors and keeps the last valid rules.</p>
+<table>
+<tr><th><code>KIDCTL_<wbr>CONFIG</code></th><td>rules directory (default <code>/etc/kidctl</code>)</td></tr>
+<tr><th><code>KIDCTL_<wbr>DB</code></th><td>usage database (default <code>/data/kidctl.db</code>)</td></tr>
+<tr><th><code>KIDCTL_<wbr>LISTEN</code></th><td>address and port (default <code>0.0.0.0:8080</code>)</td></tr>
+<tr><th><code>KIDCTL_<wbr>AGENT_<wbr>DIR</code></th><td>agent releases offered for self-update (default <code>/data/agent</code>)</td></tr>
+<tr><th><code>KIDCTL_<wbr>ALLOWED_<wbr>HOSTS</code></th><td>optional: <code>Host</code> headers accepted on the MCP, e.g. <code>kidctl.example.net</code></td></tr>
+</table>
+
+<h2 id="phone">3. Set up the phone</h2>
+<ol>
+<li><b>Factory reset.</b> In the setup wizard, join Wi-Fi but <b>skip the Google account</b>. Finish setup.</li>
+<li>Settings › About phone › tap <i>Build number</i> seven times, then Developer options › <b>USB debugging</b> on. Plug the phone in and accept the prompt.</li>
+<li>From the kidctl repository:
+<pre><code>scripts/provision.sh alex-phone https://kidctl.example.net alex-phone.token</code></pre>
+It builds the agent signed with your key, installs it, makes it device owner, grants it usage access, gives it the server address and token, then deletes the token file from the phone. After its second sync the phone shows up as <code>policy up to date</code> (Claude's <code>list_children</code>).</li>
+<li>Now add the child's Google account and install their apps. Ask Claude (or the server) for the package names of what's installed, and list them in the rules. With <code>approval: true</code>, anything not listed stays paused.</li>
+<li>For DNS filtering, install and sign in to your VPN app, then add <code>always_on_vpn</code>, <code>private_dns</code>, and the VPN app in <code>uninstall_blocked</code> and <code>user_control_disabled</code> (so it can't be stopped from Quick Settings), plus its managed configuration in <code>app_config</code> if it has one.</li>
+<li><b>Tighten last.</b> Add the restrictions you want (<code>no_factory_reset</code>, <code>no_safe_boot</code>, <code>no_config_date_time</code>, <code>no_modify_accounts</code>…), and <code>no_debugging_features</code> at the very end: it turns USB debugging off for good. From then on the agent updates itself from your server.</li>
+</ol>
+<p class="note">Play Protect checks every install on a phone with Google Play, the agent's own updates included. On a real phone with scanning on, the agent's updates installed silently, with its package and key registered for Android developer verification. If an update ever stops at an “App blocked” dialog, see the <a href="faq.html#play-protect">FAQ</a>.</p>
+
+<h2 id="claude">4. Connect Claude</h2>
+<p>The MCP endpoint, <code>/mcp</code>, is protected by OAuth: the server is its own authorization server, and you sign in with an <b>owner password</b> that only you know. Hash it (at least 12 characters, read from the terminal so it stays out of your shell history):</p>
+<pre><code>read -rs P &amp;&amp; printf '%s' "$P" | kidctl hash-password &gt; kidctl.hash; unset P</code></pre>
+<p>Give the server three settings and restart it:</p>
+<table>
+<tr><th><code>KIDCTL_<wbr>OWNER_<wbr>PASSWORD_<wbr>HASH</code></th><td>the content of <code>kidctl.hash</code>; environment only (a Kubernetes Secret, or a Docker <code>--env-file</code> with mode 600), never in git</td></tr>
+<tr><th><code>KIDCTL_<wbr>PUBLIC_<wbr>URL</code></th><td>the server's public origin, <code>https://kidctl.example.net</code></td></tr>
+<tr><th><code>KIDCTL_<wbr>STATE_<wbr>DIR</code></th><td>where OAuth clients and tokens are kept (hashed), on the persistent volume: <code>/data/oauth</code></td></tr>
+</table>
+<p>Check: <code>curl -si -X POST https://kidctl.example.net/mcp | grep -i www-authenticate</code> answers with a <code>resource_metadata</code> URL. Then add the server:</p>
+<ul>
+<li><b>claude.ai</b>: Settings › Connectors › Add custom connector, URL <code>https://kidctl.example.net/mcp</code>, sign in with the owner password, Allow.</li>
+<li><b>Claude Code</b>: <code>claude mcp add --transport http kidctl https://kidctl.example.net/mcp</code>, then <code>/mcp</code> › kidctl › Authenticate.</li>
+</ul>
+<p>Ask: <i>“What's Alex's status right now?”</i> The read tools are <code>list_children</code>, <code>status</code>, <code>usage</code>, <code>apps</code>, <code>policy</code>, <code>events</code> and <code>validate</code>. To log every client out, delete <code>oauth-tokens.json</code> in the state directory and restart. <code>KIDCTL_CIMD_ALLOWLIST</code> and <code>KIDCTL_REDIRECT_PATTERNS</code> restrict which clients may connect (see the README).</p>
+
+<h2 id="writes">5. Let Claude change the rules (optional)</h2>
+<p>With a few more settings, Claude connected over OAuth can also change the rules, and every change is a commit pushed to your repo. The server needs an ssh deploy key with write access to the rules repo:</p>
+<pre><code>ssh-keygen -t ed25519 -N '' -C kidctl-mcp -f kidctl-gitops
+gh repo deploy-key add kidctl-gitops.pub --repo you/family-rules --title "kidctl MCP" --allow-write
+ssh-keyscan -t ed25519,ecdsa,rsa github.com &gt; known_hosts
+ssh-keygen -lf known_hosts     # compare with the fingerprints your git host publishes</code></pre>
+<p>A deploy key opens one repo, but all of it, not one directory: if the repo holds more than the rules (say, your whole cluster's configuration), the key can push to all of it. Hence a dedicated repo for the rules. Branch protection that requires pull requests refuses the server's pushes.</p>
+<table>
+<tr><th><code>KIDCTL_<wbr>GITOPS_<wbr>REMOTE</code></th><td><code>git@github.com:you/family-rules.git</code> (ssh only)</td></tr>
+<tr><th><code>KIDCTL_<wbr>GITOPS_<wbr>BRANCH</code></th><td>the branch to commit to (default <code>main</code>)</td></tr>
+<tr><th><code>KIDCTL_<wbr>GITOPS_<wbr>PATH</code></th><td>the rules directory inside the repo, e.g. <code>policies</code></td></tr>
+<tr><th><code>KIDCTL_<wbr>GITOPS_<wbr>SSH_<wbr>KEY</code></th><td>the private key file, mounted read-only (on Kubernetes: a Secret, <code>defaultMode: 0440</code> with <code>fsGroup: 65532</code>)</td></tr>
+<tr><th><code>KIDCTL_<wbr>GITOPS_<wbr>KNOWN_<wbr>HOSTS</code></th><td>the pinned host keys (no trust on first use)</td></tr>
+<tr><th><code>KIDCTL_<wbr>GITOPS_<wbr>AUTHOR</code></th><td>commit author, e.g. <code>kidctl MCP &lt;kidctl-mcp@example.org&gt;</code></td></tr>
+</table>
+<p>Restart, check the log for <code>gitops: … branch main at &lt;sha&gt;</code>, reconnect the connector so the new tools are listed, and ask for a dry run: <i>“Block com.example.test for Alex, dry run.”</i> The answer shows the diff and <code>dry run, valid, nothing committed</code>. A real change appears as a <code>kidctl-mcp: …</code> commit with a <code>Requested-By:</code> line, and reaches the phone the same way as your own pushes. The write tools are listed in the <a href="policy.html#claude">rule summary</a>.</p>
+
+<h2 id="updates">6. Update the agent</h2>
+<p>Over the air, no cable, with USB debugging off. From the kidctl repository, with your signing key in place:</p>
+<pre><code>scripts/release-agent.sh you@server:/srv/kidctl/data/agent     # over ssh (with sudo), or a local directory
+git commit -m "agent: release versionCode N" agent/version.properties</code></pre>
+<p>The script builds the next version, checks that it is signed with your key, and publishes it in the server's agent directory. Each phone downloads it at its next sync, checks its SHA-256, and installs it itself. Claude's <code>list_children</code> shows the release offered and each phone's version; <code>events</code> shows the download and the update, or why it failed. Delete <code>agent.json</code> in that directory to withdraw a release.</p>
+
+<footer><a href="https://github.com/kidctl/kidctl/blob/main/LICENSE">MIT licensed</a> · self-hosted, no cloud, no tracking · <a href="https://github.com/kidctl">GitHub</a></footer>
+</main>
+</body>
+</html>
